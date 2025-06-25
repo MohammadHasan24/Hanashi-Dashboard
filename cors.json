@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://firebase-poster.vercel.app"],
+    "method": ["GET", "POST", "PUT"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type"]
+  }
+]
