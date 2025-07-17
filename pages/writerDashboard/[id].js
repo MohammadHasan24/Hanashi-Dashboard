@@ -5,7 +5,6 @@ import ReactFlow, {
   ReactFlowProvider,
   Controls,
   Background,
-  MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -19,6 +18,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 
@@ -33,34 +33,68 @@ export default function WriterDashboard() {
   const [options, setOptions] = useState([{ text: "", nextChapterId: "" }]);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [startChapterId, setStartChapterId] = useState(null);
 
   useEffect(() => {
     if (!bookId) return;
     const fetchChapters = async () => {
+      const bookDoc = await getDoc(doc(db, "stories", bookId));
+      const bookData = bookDoc.data();
+      setStartChapterId(bookData?.startChapterId || null);
+
       const chaptersRef = collection(db, "stories", bookId, "chapters");
       const snapshot = await getDocs(chaptersRef);
-      const chapterList = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const chapterList = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          createdAt: data?.createdAt?.seconds || 0,
+          position: data.position || null,
+          ...data,
+        };
+      });
+      chapterList.sort((a, b) => a.createdAt - b.createdAt);
       setChapters(chapterList);
     };
     fetchChapters();
   }, [bookId]);
 
   useEffect(() => {
-    const newNodes = chapters.map((chap, index) => ({
-      id: chap.id,
-      data: { label: chap.title || `Untitled (${chap.id.slice(0, 6)})` },
-      position: { x: (index % 5) * 250, y: Math.floor(index / 5) * 200 },
-      style: {
-        padding: "1rem",
-        borderRadius: "8px",
-        backgroundColor: "#f5f5f5",
-        color: "#000000",
-        border: "1px solid #ccc",
-      },
-    }));
+    const chapterIdSet = new Set(chapters.map((chap) => chap.id));
+    const incomingMap = {};
+    chapters.forEach((chap) => {
+      chap.options?.forEach((opt) => {
+        if (opt.nextChapterId) {
+          incomingMap[opt.nextChapterId] = true;
+        }
+      });
+    });
+
+    const newNodes = chapters.map((chap, index) => {
+      const isEnding = !chap.options || chap.options.every((o) => !o.nextChapterId);
+      const isDeadEnd = chap.options?.some((o) => o.nextChapterId && !chapterIdSet.has(o.nextChapterId));
+      const isStart = chap.id === startChapterId;
+      return {
+        id: chap.id,
+        data: {
+          label: (
+            <>
+              {isStart && <span style={{ color: "#00cc66", marginRight: 4 }}>🟢</span>}
+              {isEnding && <span style={{ color: "#ff4444", marginRight: 4 }}>🔥</span>}
+              {chap.title || `Untitled (${chap.id.slice(0, 6)})`}
+            </>
+          ),
+        },
+        position: chap.position || { x: 100, y: 100 + index * 200 },
+        style: {
+          padding: "1rem",
+          borderRadius: "8px",
+          backgroundColor: "#f5f5f5",
+          color: "#000000",
+          border: isDeadEnd ? "2px dashed red" : isStart ? "2px solid green" : "1px solid #ccc",
+        },
+      };
+    });
     setNodes(newNodes);
 
     const newEdges = [];
@@ -80,7 +114,7 @@ export default function WriterDashboard() {
       });
     });
     setEdges(newEdges);
-  }, [chapters]);
+  }, [chapters, startChapterId]);
 
   const handleSelectChapter = async (id) => {
     setSelectedChapterId(id);
@@ -96,9 +130,8 @@ export default function WriterDashboard() {
       title: chapterTitle,
       body: bodyText.split("\n\n").map((p) => p.trim()).filter(Boolean),
       options: options.slice(0, 3).filter((o) => o.text),
+      createdAt: serverTimestamp(),
     };
-
-    const chaptersRef = collection(db, "stories", bookId, "chapters");
 
     if (selectedChapterId) {
       await updateDoc(doc(db, "stories", bookId, "chapters", selectedChapterId), chapterData);
@@ -106,7 +139,7 @@ export default function WriterDashboard() {
         prev.map((chap) => (chap.id === selectedChapterId ? { ...chap, ...chapterData } : chap))
       );
     } else {
-      const newDoc = await addDoc(chaptersRef, chapterData);
+      const newDoc = await addDoc(collection(db, "stories", bookId, "chapters"), chapterData);
       const newChapter = { id: newDoc.id, ...chapterData };
       setChapters((prev) => [...prev, newChapter]);
       setSelectedChapterId(newDoc.id);
@@ -115,17 +148,19 @@ export default function WriterDashboard() {
   };
 
   const handleAddNewChapter = async () => {
-    const chaptersRef = collection(db, "stories", bookId, "chapters");
-    const newDoc = await addDoc(chaptersRef, {
+    const newDoc = await addDoc(collection(db, "stories", bookId, "chapters"), {
       title: "",
       body: [""],
       options: [{ text: "", nextChapterId: "" }],
+      createdAt: serverTimestamp(),
+      position: { x: 100, y: chapters.length * 200 },
     });
     const newChapter = {
       id: newDoc.id,
       title: "",
       body: [""],
       options: [{ text: "", nextChapterId: "" }],
+      position: { x: 100, y: chapters.length * 200 },
     };
     setChapters((prev) => [...prev, newChapter]);
     setSelectedChapterId(newDoc.id);
@@ -134,8 +169,23 @@ export default function WriterDashboard() {
     setOptions([{ text: "", nextChapterId: "" }]);
   };
 
+  const handleSetStartChapter = async () => {
+    if (!selectedChapterId) return;
+    if (startChapterId && selectedChapterId !== startChapterId) {
+      const confirmed = confirm("This will change your book’s starting point. Proceed?");
+      if (!confirmed) return;
+    }
+    await updateDoc(doc(db, "stories", bookId), {
+      startChapterId: selectedChapterId,
+    });
+    setStartChapterId(selectedChapterId);
+    alert("Start chapter updated!");
+  };
+
   const handleDeleteChapter = async () => {
     if (!selectedChapterId) return;
+    const confirmed = confirm("Are you sure you want to delete this chapter?");
+    if (!confirmed) return;
     await deleteDoc(doc(db, "stories", bookId, "chapters", selectedChapterId));
     setChapters((prev) => prev.filter((chap) => chap.id !== selectedChapterId));
     setSelectedChapterId(null);
@@ -144,10 +194,35 @@ export default function WriterDashboard() {
     setOptions([{ text: "", nextChapterId: "" }]);
   };
 
+  const handleNodeDragStop = async (_, node) => {
+    await updateDoc(doc(db, "stories", bookId, "chapters", node.id), {
+      position: node.position,
+    });
+    setChapters((prev) =>
+      prev.map((chap) => (chap.id === node.id ? { ...chap, position: node.position } : chap))
+    );
+  };
+
   return (
     <ReactFlowProvider>
       <div style={{ display: "flex", height: "100vh", backgroundColor: "#121212", color: "#eee" }}>
         <div style={{ flex: 1, position: "relative" }}>
+          <button
+            onClick={() => router.push("/addStory")}
+            style={{
+              position: "absolute",
+              top: "1rem",
+              right: "7rem",
+              zIndex: 10,
+              padding: "0.5rem 1rem",
+              backgroundColor: "#444",
+              color: "#fff",
+              border: "none",
+            }}
+          >
+            ← Back to Book Creator
+          </button>
+
           <button
             onClick={handleAddNewChapter}
             style={{
@@ -169,12 +244,11 @@ export default function WriterDashboard() {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            fitView
+            onNodeDragStop={handleNodeDragStop}
             onNodeClick={(_, node) => handleSelectChapter(node.id)}
           >
             <Background variant="dots" gap={24} size={1} color="#ffffff" />
-            <Controls style={{ backgroundColor: "#2a2a2a" }} />
-            <MiniMap nodeColor={() => "#999"} style={{ backgroundColor: "#1e1e1e" }} />
+            <Controls style={{ backgroundColor: "#2a2a2a" }} showInteractive={false} />
           </ReactFlow>
         </div>
 
@@ -186,7 +260,14 @@ export default function WriterDashboard() {
             >
               ⮘
             </button>
-            <h2 style={{ marginTop: "2rem" }}>Edit Chapter</h2>
+            <h2 style={{ marginTop: "3rem" }}>Edit Chapter</h2>
+            <button
+              onClick={handleSetStartChapter}
+              style={{ marginBottom: "1rem", backgroundColor: "#006600", color: "#fff", padding: "0.5rem 1rem", border: "none" }}
+            >
+              📌 Set as Start Chapter
+            </button>
+
             <input
               type="text"
               value={chapterTitle}

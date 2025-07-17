@@ -4,9 +4,10 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/router";
+import { useUserRole } from "../hooks/useUserRole";
+
 
 export default function AddBook() {
-  console.log("AddBook mounted")
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tag, setTag] = useState("");
@@ -15,26 +16,17 @@ export default function AddBook() {
   const [previewUrl, setPreviewUrl] = useState("");
   const router = useRouter();
 
-
   const handlePost = async () => {
-    console.log("Uploading file:", coverFile); // already added
-    console.log("About to upload...");         // before uploadBytes()
     if (!title.trim()) return;
-
     setIsUploading(true);
 
     try {
       let coverImageUrl = "";
-
-      console.log("Uploading file:", coverFile);
-
       if (coverFile) {
         const uniqueFileName = `covers/${uuidv4()}`;
         const fileRef = ref(storage, uniqueFileName);
         const snapshot = await uploadBytes(fileRef, coverFile);
-        console.log("Upload successful, getting download URL...");
         coverImageUrl = await getDownloadURL(snapshot.ref);
-        console.log("Image URL:", coverImageUrl);
       }
 
       const newDocRef = await addDoc(collection(db, "stories"), {
@@ -48,23 +40,19 @@ export default function AddBook() {
       });
 
       router.push(`/writerDashboard/${newDocRef.id}`);
-
     } catch (error) {
       console.error("Error posting:", error);
       alert("Something went wrong.");
     } finally {
       setIsUploading(false);
     }
-    
   };
 
   const handleImageChange = (e) => {
-    
     const file = e.target.files?.[0];
     if (file) {
       setCoverFile(file);
       setPreviewUrl(URL.createObjectURL(file));
-      console.log("Selected file:", file);
     }
   };
 
@@ -116,14 +104,20 @@ export default function AddBook() {
 
       <button
         onClick={(e) => {
-          e.preventDefault(); // 🔥 prevent the reload
-          console.log("Post button clicked!");
+          e.preventDefault();
           handlePost();
         }}
         disabled={isUploading}
         style={{ padding: "0.5rem 1rem" }}
       >
         {isUploading ? "Uploading..." : "Post"}
+      </button>
+
+      <button
+        onClick={() => router.push("/writerDashboard")}
+        style={{ padding: "0.5rem 1rem", marginTop: "1rem", backgroundColor: "#333", color: "#ffcc00", border: "none" }}
+      >
+        Go to Writer Dashboard
       </button>
     </main>
   );
