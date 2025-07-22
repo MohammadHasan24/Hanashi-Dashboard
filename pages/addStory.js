@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+
+
 import { useState } from "react";
 import { db, storage } from "../firebaseConfig";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
