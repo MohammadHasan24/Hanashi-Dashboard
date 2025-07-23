@@ -1,7 +1,8 @@
 {
   "projects": {
     "default": "hanashi-beta",
-    "hanashi": "hanashi-beta"
+    "hanashi": "hanashi-beta",
+    "testing user auth": "hanashi-beta"
   },
   "targets": {},
   "etags": {}

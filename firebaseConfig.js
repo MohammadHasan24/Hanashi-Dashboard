@@ -1,6 +1,11 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -13,9 +18,25 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+console.log("FIREBASE CONFIG:", firebaseConfig);
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Only initialize Firestore once (to avoid Fast Refresh errors)
+let db;
+try {
+  db = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+} catch (e) {
+  console.warn('Firestore already initialized, using getFirestore instead.');
+  db = getFirestore(app);
+}
+
 const auth = getAuth(app);
-const db = getFirestore(app);
 const storage = getStorage(app);
 
 export { auth, db, storage };
