@@ -4,10 +4,11 @@ import {
   initializeFirestore,
   getFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager
+  persistentMultipleTabManager,
 } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+// Read env vars
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -18,11 +19,21 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-console.log("FIREBASE CONFIG:", firebaseConfig);
+// 🔍 Log all config keys
+console.log('%cFIREBASE CONFIG', 'color: #00caff; font-weight: bold;', firebaseConfig);
+
+// ✅ Check for missing environment variables (only in development)
+if (typeof window !== 'undefined' && location.hostname === 'localhost') {
+  Object.entries(firebaseConfig).forEach(([key, value]) => {
+    if (!value) {
+      console.warn(`⚠️ Missing ENV var: ${key}`);
+    }
+  });
+}
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Only initialize Firestore once (to avoid Fast Refresh errors)
+// Firestore (with long polling for CORS issues)
 let db;
 try {
   db = initializeFirestore(app, {
@@ -32,7 +43,7 @@ try {
     }),
   });
 } catch (e) {
-  console.warn('Firestore already initialized, using getFirestore instead.');
+  console.warn('⚠️ Firestore already initialized. Falling back to getFirestore().');
   db = getFirestore(app);
 }
 
