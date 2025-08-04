@@ -1,55 +1,31 @@
+// pages/addStory.js
 export const dynamic = 'force-dynamic';
 
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { db, storage } from '../firebaseConfig';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { v4 as uuidv4 } from 'uuid';
+import { useUserRole } from '../hooks/useUserRole';
 
-import { useState } from "react";
-import { db, storage } from "../firebaseConfig";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { v4 as uuidv4 } from "uuid";
-import { useRouter } from "next/router";
-import { useUserRole } from "../hooks/useUserRole";
-
-
-export default function AddBook() {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [tag, setTag] = useState("");
-  const [coverFile, setCoverFile] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState("");
+export default function AddStory() {
   const router = useRouter();
+  const { user, roles, loading } = useUserRole();
 
-  const handlePost = async () => {
-    if (!title.trim()) return;
-    setIsUploading(true);
-
-    try {
-      let coverImageUrl = "";
-      if (coverFile) {
-        const uniqueFileName = `covers/${uuidv4()}`;
-        const fileRef = ref(storage, uniqueFileName);
-        const snapshot = await uploadBytes(fileRef, coverFile);
-        coverImageUrl = await getDownloadURL(snapshot.ref);
-      }
-
-      const newDocRef = await addDoc(collection(db, "stories"), {
-        title,
-        description,
-        tags: tag ? [tag] : [],
-        chapters: [],
-        coverImage: coverImageUrl,
-        published: false,
-        createdAt: serverTimestamp(),
-      });
-
-      router.push(`/writerDashboard/${newDocRef.id}`);
-    } catch (error) {
-      console.error("Error posting:", error);
-      alert("Something went wrong.");
-    } finally {
-      setIsUploading(false);
+  // redirect non-writers to login
+  useEffect(() => {
+    if (!loading && (!user || !roles?.includes('writer'))) {
+      router.replace('/login');
     }
-  };
+  }, [user, roles, loading, router]);
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [tag, setTag] = useState('');
+  const [coverFile, setCoverFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
@@ -59,69 +35,124 @@ export default function AddBook() {
     }
   };
 
+  const handlePost = async (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setIsUploading(true);
+
+    try {
+      let coverImagePath = '';
+      if (coverFile) {
+        // store under covers/ with uuid
+        coverImagePath = `covers/${uuidv4()}`;
+        const storageRef = ref(storage, coverImagePath);
+        const snap = await uploadBytes(storageRef, coverFile);
+        // get full download URL
+        const downloadUrl = await getDownloadURL(snap.ref);
+        coverImagePath = downloadUrl;
+      }
+
+      // add Firestore doc
+      const docRef = await addDoc(collection(db, 'stories'), {
+        title,
+        description,
+        tags: tag ? [tag] : [],
+        chapters: [],
+        coverImage: coverImagePath,
+        published: false,
+        createdAt: serverTimestamp(),
+      });
+
+      // navigate into your new book’s flow
+      router.push(`/writerDashboard/${docRef.id}`);
+    } catch (err) {
+      console.error('Error posting story:', err);
+      alert('Oops! Something went wrong.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (loading || !roles?.includes('writer')) {
+    return null; // or a loading spinner
+  }
+
   return (
-    <main style={{ padding: "2rem", maxWidth: "600px" }}>
+    <main style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
       <h1>Add a New Book</h1>
+      <form onSubmit={handlePost} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <input
+          type="text"
+          placeholder="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+          style={{ padding: '0.75rem', fontSize: '1rem' }}
+        />
+        <textarea
+          placeholder="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          style={{ padding: '0.75rem', fontSize: '1rem' }}
+        />
+        <select
+          value={tag}
+          onChange={(e) => setTag(e.target.value)}
+          style={{ padding: '0.75rem', fontSize: '1rem' }}
+        >
+          <option value="">Select genre</option>
+          <option value="horror">Horror</option>
+          <option value="drama">Drama</option>
+          <option value="romance">Romance</option>
+          <option value="sci-fi">Sci-Fi</option>
+          <option value="fantasy">Fantasy</option>
+        </select>
 
-      <input
-        type="text"
-        value={title}
-        placeholder="Title"
-        onChange={(e) => setTitle(e.target.value)}
-        style={{ padding: "0.5rem", width: "100%", marginBottom: "1rem" }}
-      />
+        <input type="file" accept="image/*" onChange={handleImageChange} />
 
-      <input
-        type="text"
-        value={description}
-        placeholder="Description"
-        onChange={(e) => setDescription(e.target.value)}
-        style={{ padding: "0.5rem", width: "100%", marginBottom: "1rem" }}
-      />
+        {previewUrl && (
+          <div>
+            <img
+              src={previewUrl}
+              alt="Cover preview"
+              style={{ width: '100%', borderRadius: '8px', marginBottom: '1rem' }}
+            />
+          </div>
+        )}
 
-      <select
-        value={tag}
-        onChange={(e) => setTag(e.target.value)}
-        style={{ padding: "0.5rem", width: "100%", marginBottom: "1rem" }}
-      >
-        <option value="">Select a genre</option>
-        <option value="horror">Horror</option>
-        <option value="drama">Drama</option>
-        <option value="romance">Romance</option>
-        <option value="sci-fi">Sci-Fi</option>
-        <option value="fantasy">Fantasy</option>
-      </select>
+        <button
+          type="submit"
+          disabled={isUploading}
+          style={{
+            padding: '0.75rem',
+            fontSize: '1rem',
+            background: '#ffcc00',
+            color: '#000',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          {isUploading ? 'Uploading…' : 'Post'}
+        </button>
 
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleImageChange}
-        style={{ marginBottom: "1rem" }}
-      />
-
-      {previewUrl && (
-        <div style={{ marginBottom: "1rem" }}>
-          <img src={previewUrl} alt="Preview" style={{ maxWidth: "100%", borderRadius: "8px" }} />
-        </div>
-      )}
-
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          handlePost();
-        }}
-        disabled={isUploading}
-        style={{ padding: "0.5rem 1rem" }}
-      >
-        {isUploading ? "Uploading..." : "Post"}
-      </button>
-
-      <button
-        onClick={() => router.push("/writerDashboard")}
-        style={{ padding: "0.5rem 1rem", marginTop: "1rem", backgroundColor: "#333", color: "#ffcc00", border: "none" }}
-      >
-        Go to Writer Dashboard
-      </button>
+        <button
+          type="button"
+          onClick={() => router.push('/writerDashboard')}
+          style={{
+            marginTop: '0.5rem',
+            padding: '0.75rem',
+            background: '#333',
+            color: '#ffcc00',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          ← Back to Dashboard
+        </button>
+      </form>
     </main>
   );
 }

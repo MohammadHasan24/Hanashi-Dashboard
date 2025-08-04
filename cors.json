@@ -1,12 +1,8 @@
 [
   {
-    "origin": [
-      "https://hanashi-writer-app.vercel.app",
-      "https://writer.hanashi.app",
-      "https://hanashi-writer-app-git-main-mohammadhasan24s-projects.vercel.app"
-    ],
-    "method": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "Authorization"]
+    "origin": ["*"],
+    "method": ["GET","HEAD","PUT","POST","DELETE","OPTIONS"],
+    "responseHeader": ["Content-Type","Authorization"],
+    "maxAgeSeconds": 3600
   }
 ]
