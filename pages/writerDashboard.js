@@ -86,7 +86,7 @@ export default function WriterDashboard() {
                   src={imageUrl}
                   alt={`${item.title} cover`}
                   style={styles.image}
-                  onClick={() => router.push(`/writerDashboard/${item.id}`)}
+onClick={() => router.push(`/bookDescription/${item.id}`)}
                 />
                 <h2 style={styles.cardTitle}>{item.title}</h2>
                 <p style={styles.cardDescription}>{item.description || "No description provided."}</p>

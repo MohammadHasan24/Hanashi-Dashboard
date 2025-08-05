@@ -350,7 +350,7 @@ const handleNodeDragStop = async (_, node) => {
     <ReactFlowProvider>
       <div style={{ display: "flex", height: "100vh", backgroundColor: "#121212", color: "#eee" }}>
         {/* Top buttons */}
-        <TopNavButtons router={router} onAddNewChapter={handleAddNewChapter} />
+<TopNavButtons />
 
         {bookId && (
   <StoryFlowCanvas
